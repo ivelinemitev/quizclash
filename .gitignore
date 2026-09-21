@@ -1,0 +1,9 @@
+node_modules
+.next/
+.DS_Store
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.wrangler/
+.claude/settings.local.json
