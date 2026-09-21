@@ -1,0 +1,1 @@
+ALTER TABLE `quizzes` ADD `generated_by` text;
