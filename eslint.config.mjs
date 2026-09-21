@@ -11,7 +11,12 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "dist/**",
     "next-env.d.ts",
+    "worker-configuration.d.ts",
+    // Separate deployable Worker with its own tsconfig/typecheck script —
+    // not part of the Next.js app eslint-config-next's rules target.
+    "workers/**",
   ]),
 ]);
 

@@ -1,0 +1,66 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "quizclash",
+	"compatibility_date": "2026-09-18",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "vinext/server/fetch-handler",
+	"assets": {
+		"directory": "dist/client",
+		"not_found_handling": "none",
+		"binding": "ASSETS"
+	},
+	"ai": {
+		"binding": "AI"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "quizclash-db",
+			"database_id": "a9420997-9404-4fec-8a57-7382948373ca",
+			"remote": true
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "3f758870b7454abe813b5a55e3030e2f",
+			"remote": true
+		}
+	],
+	"vectorize": [
+		{
+			"binding": "VECTORIZE",
+			"index_name": "quizclash-questions",
+			"remote": true
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "GAME_ROOMS",
+				"class_name": "RoomDurableObject",
+				"script_name": "quizclash-rooms"
+			}
+		]
+	},
+	"queues": {
+		"producers": [
+			{
+				"binding": "POST_GAME",
+				"queue": "quizclash-post-game"
+			}
+		]
+	},
+	"ratelimits": [
+		{
+			"name": "CREATE_GAME_LIMITER",
+			"namespace_id": "1",
+			"simple": {
+				"limit": 5,
+				"period": 60
+			}
+		}
+	]
+}
