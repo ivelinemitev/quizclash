@@ -33,9 +33,6 @@ architecture.
 -   Queues
 -   Vitest
 
-Do not introduce Prisma, PostgreSQL, Supabase, Firebase, Express,
-NestJS, Redis, a separate Node backend, or a second database.
-
 ## 3. Locked Next.js + Cloudflare deployment architecture
 
 QuizClash is a **full-stack Next.js application deployed to Cloudflare
