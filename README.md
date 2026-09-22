@@ -1,6 +1,15 @@
 # QuizClash
 
-A small multiplayer quiz game (2–6 players, 5 questions, 4 answers each) built as a Next.js App Router application deployed to Cloudflare Workers via [vinext](https://vinext.dev). See `CLAUDE.md`/`ARCHITECTURE.md` for the full spec and `PROGRESS.md` for what's implemented so far.
+A small multiplayer quiz game: a host picks a topic, an AI model writes 5
+questions on the spot, 2–6 players join with a room code, everyone answers
+the same 5 questions, and a final ranking appears once the last question
+closes. Built as a Next.js App Router application deployed to Cloudflare
+Workers via [vinext](https://vinext.dev), as a deliberately small
+2–3-day exercise in five Cloudflare building blocks: D1, Durable Objects,
+Workers AI + Vectorize, KV, and Queues.
+
+See `CLAUDE.md`/`ARCHITECTURE.md` for the full locked spec,
+and [`docs/NOTES.md`](docs/NOTES.md) for documentation.
 
 ## Prerequisites
 
@@ -42,20 +51,53 @@ npm run deploy:vinext
 
 Wrangler will print each deployed `https://<name>.<subdomain>.workers.dev` URL.
 
-**First-time setup under a different Cloudflare account:** the D1 database, KV namespace, and Vectorize index referenced in `wrangler.jsonc` are tied to the account that created them. On a fresh account, provision your own and update the IDs:
+**First-time setup under a different Cloudflare account:** the D1 database, KV namespace, Vectorize index, and Queues referenced in `wrangler.jsonc` are tied to the account that created them. On a fresh account, provision your own and update the IDs:
 
 ```bash
 npx wrangler d1 create quizclash-db --binding DB --update-config
 npx wrangler kv namespace create quizclash-cache --binding CACHE --update-config
 npx wrangler vectorize create quizclash-questions --preset "@cf/baai/bge-small-en-v1.5" --binding VECTORIZE --update-config
+npx wrangler vectorize create-metadata-index quizclash-questions --property-name=topic --type=string
+npx wrangler queues create quizclash-post-game
+npx wrangler queues create quizclash-post-game-dlq
 npx wrangler d1 migrations apply quizclash-db --local
 npx wrangler d1 migrations apply quizclash-db --remote
 ```
 
 **Secrets:** set them with `npx wrangler secret put <NAME>` — never put secret values in `.dev.vars` or `.env*` (both gitignored) or in `wrangler.jsonc` (which *is* committed, since it only holds binding configuration, never secret values).
 
-## Current scope
+## Architecture
 
-Implemented so far: shared Zod validation, Server Actions for the Create/Join forms, deployment to Cloudflare Workers, real topic-based quiz generation (Workers AI JSON mode → shared schema validation → Vectorize near-duplicate check → D1 via Drizzle), a KV cache of recently-played topics, and real multiplayer coordination via a Durable Object (`workers/rooms/`) — join/start/answer-submission are authoritative server-side, with idempotent scoring and a per-question timeout, and completed games persist to D1 with a post-game Queue event feeding a KV leaderboard snapshot. See `PROGRESS.md` for phase-by-phase status and known limitations (rate limiting/audit logging and the final architecture write-up are still ahead).
+Two Cloudflare Workers, not one: `quizclash` (this Next.js app, via
+vinext) and a small standalone `quizclash-rooms` Worker
+(`workers/rooms/`) hosting the `RoomDurableObject` class and the
+post-game Queue consumer — vinext owns the main Worker's entrypoint
+bundle, so a Durable Object class can't be exported from it directly; the
+main Worker reaches `quizclash-rooms` through a cross-script Durable
+Object **service binding** (RPC, never HTTP). `quizclash-rooms` is
+deployed with `workers_dev: false` — it's never meant to be reached over
+public HTTP at all.
 
-A full architecture diagram and walkthrough will be added here during the final verification phase.
+```mermaid
+flowchart TD
+    Browser["Browser(s)"]
+    NextJS["Next.js App Router<br/>Server + Client Components"]
+    Actions["Server Actions<br/>(shared Zod validation)"]
+    Worker["Cloudflare Worker: quizclash<br/>(vinext)"]
+
+    AI["Workers AI<br/>generate 5 questions"]
+    Zod["Zod QuizSchema<br/>structural validation"]
+    Vectorize["Vectorize<br/>near-duplicate check<br/>(same topic only)"]
+    D1["D1 + Drizzle<br/>quizzes / questions /<br/>completed_games / game_results"]
+
+    DO["Durable Object: Room<br/>(quizclash-rooms Worker)<br/>players, status, current question,<br/>scores, answers, idempotency"]
+
+    Queue["Queue: POST_GAME<br/>(quizclash-rooms consumer)<br/>backoff + dead-letter queue"]
+    KV["KV: CACHE<br/>recent topics, leaderboard snapshot<br/>(disposable, rebuildable)"]
+
+    Browser --> NextJS --> Actions --> Worker
+    Worker -->|create quiz| AI --> Zod --> Vectorize --> D1
+    Worker -->|RPC via service binding, not HTTP| DO
+    DO -->|game finishes once| D1
+    D1 -.best-effort.-> Queue --> KV
+```
