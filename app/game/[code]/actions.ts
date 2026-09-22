@@ -74,8 +74,23 @@ export async function submitAnswerAction(
   );
 
   if (!result.ok) {
+    logAuditEvent({
+      action: "submit_answer",
+      actor: playerId,
+      target: roomCode,
+      outcome: "failed",
+      details: { questionIndex, error: result.error },
+    });
     return result;
   }
+
+  logAuditEvent({
+    action: "submit_answer",
+    actor: playerId,
+    target: roomCode,
+    outcome: result.correct ? "correct" : "incorrect",
+    details: { questionIndex, score: result.score },
+  });
 
   if (result.roomFinished) {
     await finalizeGameAction(roomCode);

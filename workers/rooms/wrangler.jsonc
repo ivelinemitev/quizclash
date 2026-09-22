@@ -3,6 +3,10 @@
   "name": "quizclash-rooms",
   "compatibility_date": "2026-09-18",
   "main": "src/index.ts",
+  // This worker is never meant to be reached over public HTTP — the only
+  // real entry points are the Durable Object binding and the Queue
+  // consumer. Its own fetch() handler already just 404s regardless.
+  "workers_dev": false,
   "durable_objects": {
     "bindings": [
       {
@@ -27,7 +31,8 @@
   "queues": {
     "consumers": [
       {
-        "queue": "quizclash-post-game"
+        "queue": "quizclash-post-game",
+        "dead_letter_queue": "quizclash-post-game-dlq"
       }
     ]
   }

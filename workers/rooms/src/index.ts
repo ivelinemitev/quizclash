@@ -2,6 +2,7 @@ export { RoomDurableObject } from "./room-durable-object";
 
 const LEADERBOARD_KEY = "leaderboard:recent";
 const LEADERBOARD_LIMIT = 20;
+const RETRY_BASE_DELAY_SECONDS = 2;
 
 export type PostGameMessage = {
   roomCode: string;
@@ -40,8 +41,12 @@ export default {
         message.ack();
       } catch {
         // Failed background processing must not invalidate the completed
-        // game (already durably in D1) — just let this one message retry.
-        message.retry();
+        // game (already durably in D1) — just let this one message retry,
+        // with exponential backoff so a transient KV blip doesn't hammer
+        // it immediately. After the consumer's configured retry limit,
+        // Cloudflare routes the message to `quizclash-post-game-dlq`
+        // instead of dropping it.
+        message.retry({ delaySeconds: RETRY_BASE_DELAY_SECONDS ** message.attempts });
       }
     }
   },
